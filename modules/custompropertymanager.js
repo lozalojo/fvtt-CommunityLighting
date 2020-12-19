@@ -44,21 +44,25 @@ class CLCustomPropertyManager {
     }
 
     static async removeAllCustomProperties(html) {
+        html.find("#community-lighting-custom-image").attr('name', 'removing');
+        html.find(".community-lighting-custom-property-noanim").remove();
+        html.find(".community-lighting-custom-property").attr('name', 'removing');
+        html.find(".community-lighting-custom-property").children('input').attr('name', 'removing');
         html.find(".community-lighting-custom-property").hide('normal', function () {
             $(this).remove();
         });
     }
 
-    static async addCustomProperties(objectConfig, customPropertySibling, customAnimationProperties, animateShow = false) {
+    static async addCustomProperties(objectConfig, customPropertySibling, customAnimationProperties, animationName, isToken, animateShow = false) {
 
-        var isToken = false;
-        if (objectConfig.object.light) {
-            isToken = true;
-        }
+        var supports = { ...CONFIG.Canvas.lightAnimations[animationName].illuminationShader.supports, ...CONFIG.Canvas.lightAnimations[animationName].colorationShader.supports}
 
         var customAnimationPropertiesClone = JSON.parse(JSON.stringify(customAnimationProperties)); // Clone object so we can reverse it without reversing original
         
-        customAnimationPropertiesClone.reverse().forEach((customPropertyObject) => {
+        customAnimationPropertiesClone.reverse().forEach((customPropertyObject, index) => {
+            if(customPropertyObject.supports && !supports[customPropertyObject.supports]){
+                return;
+            }
             var currentValue;
             if (isToken) {
                 if (objectConfig.object.light.animation) {
@@ -74,12 +78,32 @@ class CLCustomPropertyManager {
                 }
             }
             switch (customPropertyObject.type) {
+                case "animationName":
+                    // Add hidden animation name
+                    var customPropertyEl = $(`<div class="form-group community-lighting-custom-property-noanim" style="display:none">
+                    <input class="text" type="text" name="lightAnimation.animationName" value="${currentValue}">
+                    </div>`);
+                    customPropertySibling.after(customPropertyEl);
+                    break;
+                case "speedDescription":
+                    if(currentValue){
+                        var customPropertyEl = $(`<p class="hint community-lighting-custom-property-noanim">${currentValue}</p>`);
+                        $('[name="lightAnimation.speed"]').parent().parent().append(customPropertyEl)
+                    }
+                    break;
+                case "intensityDescription":
+                    if(currentValue){
+                        var customPropertyEl = $(`<p class="hint community-lighting-custom-property-noanim">${currentValue}</p>`);
+                        $('[name="lightAnimation.intensity"]').parent().parent().append(customPropertyEl)
+                    }
+                    break;
                 case "color":
                     var customPropertyEl = $(
                         `<div class="form-group community-lighting-custom-property">
-                            <label>${customPropertyObject.title}</label>
+                            <label>${game.i18n.localize(customPropertyObject.title)}</label>
                             <input class="color" type="text" name="lightAnimation.${customPropertyObject.varName}" value="${currentValue}">
                             <input type="color" value="${currentValue}" data-edit="lightAnimation.${customPropertyObject.varName}">
+                            ${customPropertyObject.hint?`<p class="hint">${game.i18n.localize(customPropertyObject.hint)}</p>`:''}
                         </div>`)
                     if (animateShow) {
                         customPropertyEl.hide();
@@ -92,11 +116,12 @@ class CLCustomPropertyManager {
                 case "range":
                     var customPropertyEl = $(
                     `<div class="form-group community-lighting-custom-property">
-                        <label>${customPropertyObject.title}</label>
+                        <label>${game.i18n.localize(customPropertyObject.title)}</label>
                         <div class="form-fields">
                             <input type="range" name="lightAnimation.${customPropertyObject.varName}" value="${currentValue}" min="${customPropertyObject.min}" max="${customPropertyObject.max}" step="${customPropertyObject.step}" data-dtype="Number">
                             <span class="range-value">${currentValue}</span>
                         </div>
+                        ${customPropertyObject.hint?`<p class="hint">${game.i18n.localize(customPropertyObject.hint)}</p>`:''}
                     </div>`);
                     if (animateShow) {
                         customPropertyEl.hide();
@@ -110,8 +135,9 @@ class CLCustomPropertyManager {
                     var customPropertyEl = 
                     $(
                     `<div class="form-group community-lighting-custom-property">
-                        <label>${customPropertyObject.title}</label>
+                        <label>${game.i18n.localize(customPropertyObject.title)}</label>
                         <input type="checkbox" name="lightAnimation.${customPropertyObject.varName}" data-dtype="Boolean" ${currentValue?"checked":""}>
+                        ${customPropertyObject.hint?`<p class="hint">${game.i18n.localize(customPropertyObject.hint)}</p>`:''}
                     </div>`);
                     if (animateShow) {
                         customPropertyEl.hide();
@@ -129,13 +155,37 @@ class CLCustomPropertyManager {
                     })
                     var customPropertyEl = $(
                     `<div class="form-group community-lighting-custom-property">
-                        <label>${customPropertyObject.title}</label>
+                        <label>${game.i18n.localize(customPropertyObject.title)}</label>
                         <div class="form-fields">
                             <select name="lightAnimation.${customPropertyObject.varName}">
                                 ${options}
                             </select>
                         </div>
+                        ${customPropertyObject.hint?`<p class="hint">${game.i18n.localize(customPropertyObject.hint)}</p>`:''}
                     </div>`);
+                    if (animateShow) {
+                        customPropertyEl.hide();
+                    }
+                    customPropertySibling.after(customPropertyEl);
+                    if (animateShow) {
+                        customPropertyEl.show('normal');
+                    }
+                    
+                    break;
+                case "image":
+                    var customPropertyEl = 
+                    $(`
+                    <div class="form-group community-lighting-custom-property">
+                        <label>${game.i18n.localize(customPropertyObject.title)}</label>
+                        <div class="form-fields">
+                            <button type="button" class="file-picker" data-type="imagevideo" data-target="lightAnimation.${customPropertyObject.varName}" title="Browse Files" tabindex="-1">
+                                <i class="fas fa-file-import fa-fw"></i>
+                            </button>
+                            <input id="community-lighting-custom-image" class="image" type="text" name="lightAnimation.${customPropertyObject.varName}" placeholder="path/image.png" value="${currentValue}">
+                        </div>
+                        ${customPropertyObject.hint?`<p class="hint">${game.i18n.localize(customPropertyObject.hint)}</p>`:''}
+                    </div>`)
+
                     if (animateShow) {
                         customPropertyEl.hide();
                     }
@@ -148,6 +198,16 @@ class CLCustomPropertyManager {
 
                 default:
                     break;
+            }
+            if(index == customAnimationPropertiesClone.length-1){
+                    var customPropertyEl = $(`<h2 class="community-lighting-custom-property ignore" style="cursor: pointer;" onclick="$('.community-lighting-custom-property').not('.ignore').toggle('normal');">${game.i18n.localize('COMMUNITYLIGHTING.ui.propertiesHeader')}</h2>`);
+                    if (animateShow) {
+                        customPropertyEl.hide();
+                    }
+                    $('.community-lighting-custom-property').not('[name="removing"]').not('.ignore').first().before(customPropertyEl);
+                    if (animateShow) {
+                        customPropertyEl.show('normal');
+                    }
             }
         })
     }
@@ -163,24 +223,46 @@ class CLCustomPropertyManager {
     }
 
     static async onRenderTokenOrLightConfig(objectConfig, html, data) {
+        var isToken = false;
+        if (objectConfig.object.light) {
+            isToken = true;
+        }
         var animTypeSelector = html.find("[name='lightAnimation.type']"); // Get the animation type selector element
         var customPropertySibling = html.find('[name="lightAnimation.intensity"]').parent().parent(); // Get the div holding the intensity slider so we can add our props after it
         CLCustomPropertyManager.addOptGroups(html);
+
         // Grab the current value, and set any custom properties up
         var customAnimationProperties = CONFIG.Canvas.lightAnimations[animTypeSelector.val()]?.customProperties;
 
         CLCustomPropertyManager.removeAllCustomProperties(html);
 
         if (customAnimationProperties && customAnimationProperties.length > 0) {
-            CLCustomPropertyManager.addCustomProperties(objectConfig, customPropertySibling, customAnimationProperties);
+            CLCustomPropertyManager.addCustomProperties(objectConfig, customPropertySibling, customAnimationProperties, animTypeSelector.val(), isToken);
+            objectConfig.activateListeners(html);
         }
 
         // When the type changes, set up any custom properties
-        animTypeSelector.on('change', function () {
+        var activateListenersTimeout;
+        animTypeSelector.on('change', await function () {
             CLCustomPropertyManager.removeAllCustomProperties(html);
             customAnimationProperties = CONFIG.Canvas.lightAnimations[this.value]?.customProperties;
             if (customAnimationProperties && customAnimationProperties.length > 0) {
-                CLCustomPropertyManager.addCustomProperties(objectConfig, customPropertySibling, CONFIG.Canvas.lightAnimations[this.value].customProperties, true);
+                CLCustomPropertyManager.addCustomProperties(objectConfig, customPropertySibling, CONFIG.Canvas.lightAnimations[this.value].customProperties, this.value, isToken, true);
+                // TODO: Disabled as it causes animations to change, but not shaders. If we can force a shader change, all the better...
+                if(!isToken){
+                    this.disabled = true;
+                    if(activateListenersTimeout){
+                        clearTimeout(activateListenersTimeout);
+                    }
+                    activateListenersTimeout = setTimeout(() => {
+                        objectConfig.activateListeners(html);
+                        var fd = new FormDataExtended(objectConfig.form);
+                        objectConfig.object.data = mergeObject(objectConfig.object.data, fd.toObject(), {inplace: false});
+                        objectConfig.object.updateSource();
+                        objectConfig.object.refresh();
+                        this.disabled = false;
+                    }, 500);
+                }
             }
         });
     }
